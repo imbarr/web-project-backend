@@ -7,6 +7,7 @@ scalaVersion := "2.12.8"
 val circeVersion = "0.10.0"
 val akkaHttpVersion = "10.1.5"
 val akkaVersion = "2.5.18"
+val doobieVersion = "0.6.0"
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core",
@@ -24,3 +25,9 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
   "com.typesafe.akka" %% "akka-http-testkit" % akkaHttpVersion % Test
 )
+
+libraryDependencies ++= Seq(
+  "org.tpolecat" %% "doobie-core" % doobieVersion
+)
+
+libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.10.1"
