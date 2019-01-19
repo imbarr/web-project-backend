@@ -46,3 +46,14 @@ fabric.properties
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# sbt
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+.history
+.cache
+.lib/
