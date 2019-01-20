@@ -5,15 +5,17 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import cats.effect.IO
-import domain.{Payment, Request}
+import domain._
+import domain.json.Decoding._
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
-class Server(config: Config) {
-  implicit val system: ActorSystem = ActorSystem("my-system")
+class Server(config: Config)
+            (implicit val executionContext: ExecutionContextExecutor, implicit val system: ActorSystem) {
+
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+  import util.CirceMarshalling.unmarshaller
 
   val CORSHeaders = List(
     `Access-Control-Allow-Origin`.*,

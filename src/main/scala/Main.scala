@@ -1,6 +1,13 @@
+import akka.actor.ActorSystem
 import scala.util.{Failure, Success}
+import pureconfig.generic.auto._
+
+import scala.concurrent.ExecutionContextExecutor
 
 object Main extends App {
+  implicit val system: ActorSystem = ActorSystem("my-system")
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
   pureconfig.loadConfig[Config] match {
     case Left(_) =>
       println("Failed to load config.")
