@@ -1,11 +1,10 @@
 package domain
 
-import io.circe.generic.JsonCodec
 import util.RichRegex.RichRegex
 
 import scala.util.Try
 
-@JsonCodec(decodeOnly = true) case class Payment(cardNumber: String,
+case class Payment(cardNumber: String,
                    expirationDate: String,
                    CVC: String,
                    money: String,
