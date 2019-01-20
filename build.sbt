@@ -31,3 +31,5 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.10.1"
+
+libraryDependencies += "com.microsoft.sqlserver" % "mssql-jdbc" % "7.0.0.jre10"
