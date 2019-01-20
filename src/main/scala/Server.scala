@@ -7,40 +7,33 @@ import akka.stream.ActorMaterializer
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-object Server extends App {
-  pureconfig.loadConfig[Config] match {
-    case Left(_) =>
-      println("Failed to load config.")
-      1
-    case Right(config) =>
-      implicit val system: ActorSystem = ActorSystem("my-system")
-      implicit val materializer: ActorMaterializer = ActorMaterializer()
-      implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+class Server(config: Config) {
+    implicit val system: ActorSystem = ActorSystem("my-system")
+    implicit val materializer: ActorMaterializer = ActorMaterializer()
+    implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-      val CORSHeaders = List(
-        `Access-Control-Allow-Origin`.*,
-        `Access-Control-Allow-Credentials`(true),
-        `Access-Control-Allow-Headers`("Authorization", "Content-Type", "X-Requested-With")
-      )
+    val CORSHeaders = List(
+      `Access-Control-Allow-Origin`.*,
+      `Access-Control-Allow-Credentials`(true),
+      `Access-Control-Allow-Headers`("Authorization", "Content-Type", "X-Requested-With")
+    )
 
-      val route = post {
-        path("credit-card") {
-          complete(HttpResponse(StatusCodes.OK, CORSHeaders))
+    val route = post {
+      path("credit-card") {
+        complete(HttpResponse(StatusCodes.OK, CORSHeaders))
+      } ~
+        path("internet-bank") {
+          complete(Future({
+            Thread.sleep(3000)
+            HttpResponse(StatusCodes.OK, CORSHeaders)
+          }))
         } ~
-          path("internet-bank") {
-            complete(Future({
-              Thread.sleep(3000)
-              HttpResponse(StatusCodes.OK, CORSHeaders)
-            }))
-          } ~
-          path("ask") {
-            complete(StatusCodes.Forbidden)
-          }
-      }
+        path("ask") {
+          complete(StatusCodes.Forbidden)
+        }
+    }
 
-      val port = 8081
-      val bindingFuture = Http().bindAndHandle(route, "localhost", port)
-
-      println("Server is up on port " + port)
-  }
+    def start(): Future[Http.ServerBinding] = {
+      Http().bindAndHandle(route, config.server.interface, config.server.port)
+    }
 }
