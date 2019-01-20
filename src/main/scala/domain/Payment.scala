@@ -1,10 +1,11 @@
 package domain
 
+import io.circe.generic.JsonCodec
 import util.RichRegex.RichRegex
 
 import scala.util.Try
 
-case class Payment(cardNumber: String,
+@JsonCodec(decodeOnly = true) case class Payment(cardNumber: String,
                    expirationDate: String,
                    CVC: String,
                    money: String,
@@ -16,4 +17,7 @@ case class Payment(cardNumber: String,
   require(Try(money.toInt).map(m => m >= 1000 && m <= 75000).getOrElse(false))
   require(comment.forall(_.length <= 150))
   require("(?=[^\\s]+)(?=(\\w+)@([\\w\\.]+))".r matches email)
+
+  val expirationMonth: Int = expirationDate.split("/")(0).toInt
+  val expirationYear: Int = expirationDate.split("/")(1).toInt
 }
