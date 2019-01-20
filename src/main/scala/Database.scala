@@ -15,14 +15,14 @@ class Database(config: DatabaseConfig)(implicit executionContext: ExecutionConte
     config.password)
 
   def addPayment(payment: Payment): IO[Int] = {
-    sql"""insert into payments values ${payment.cardNumber}, ${payment.expirationMonth}, ${payment.expirationYear},
-         |${payment.CVC}, ${payment.money.toInt}, ${payment.comment.getOrElse("null")}, ${payment.email};"""
+    sql"""insert into payments values (${payment.cardNumber}, ${payment.expirationMonth}, ${payment.expirationYear},
+         |${payment.CVC}, ${payment.money.toInt}, ${payment.comment}, ${payment.email}, 1);"""
       .stripMargin.update.run.transact(xa)
   }
 
   def addRequest(request: Request): IO[Int] = {
-    sql"""insert into requests values ${request.taxId}, ${request.BIC}, ${request.accountNumber},
-         |${request.VAT.toString}, ${request.money.toInt}, ${request.telephone}, ${request.email};"""
+    sql"""insert into requests values (${request.taxId}, ${request.BIC}, ${request.accountNumber},
+         |${request.VAT.toString}, ${request.money.toInt}, ${request.telephone}, ${request.email});"""
       .stripMargin.update.run.transact(xa)
   }
 }
