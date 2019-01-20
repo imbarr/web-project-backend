@@ -11,6 +11,6 @@ case class Request(taxId: String, BIC: String, accountNumber: String,
   require("[0-9]{9}".r matches BIC)
   require("[0-9]{20}".r matches accountNumber)
   require(Try(money.toInt).map(m => m >= 1000 && m <= 75000).getOrElse(false))
-  require("+7[0-9]{10}".r matches telephone)
-  require("(?=[^\\s]+)(?=(\\w+)@([\\w\\.]+))".r matches email)
+  require("\\+7[0-9]{10}".r matches telephone)
+  require("[^@]+@[^\\.]+\\..+".r matches email)
 }
