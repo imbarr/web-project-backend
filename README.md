@@ -6,3 +6,5 @@
 **Часть 2 (cервер-заглушка):** git checkout task-2
 
 **Часть 3:** git checkout task-3
+
+[**Ссылка на конфигурацию базы данных**](https://github.com/imbarr/web-project-database)
