@@ -1,5 +1,3 @@
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.headers._
@@ -7,17 +5,17 @@ import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import cats.effect.IO
+import com.microsoft.sqlserver.jdbc.SQLServerException
+import com.typesafe.scalalogging.Logger
 import domain._
 import domain.json.Decoding._
 import io.circe.Json
-import java.nio.charset.StandardCharsets
 
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
 class Server(config: Config)
-            (implicit val executionContext: ExecutionContextExecutor, implicit val system: ActorSystem) {
+            (implicit val executionContext: ExecutionContextExecutor, system: ActorSystem, log: Logger) {
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
   import util.CirceMarshalling.unmarshaller
@@ -32,13 +30,19 @@ class Server(config: Config)
 
   val success = complete(HttpResponse(StatusCodes.OK, CORSHeaders))
   val failure = complete(HttpResponse(StatusCodes.InternalServerError, CORSHeaders))
+  val badRequest = complete(HttpResponse(StatusCodes.BadRequest, CORSHeaders))
 
   def insertToRoute[T](result: IO[Int]) =
-    onComplete(result.map(i => if(i == 1) success else failure).unsafeToFuture()) {
-      case Success(x) => x
-      case Failure(e) =>
-        println("Error: database failure")
-        e.printStackTrace()
+    onComplete(result.flatMap(
+      i =>
+        if(i == 1) IO(Unit)
+        else IO.raiseError(new Exception("No data modified"))
+    ).unsafeToFuture()) {
+      case Success(_) =>
+        log.debug("Data inserted")
+        success
+      case Failure(_) =>
+        log.error("Database transaction resulted in error")
         failure
     }
 
@@ -56,18 +60,16 @@ class Server(config: Config)
         insertToRoute(db.addRequest(request))
       }
     } ~
-    entity(as[Json]) { json =>
-      println("Error: unrecognized object\n" + json.toString)
-      failure
+    entity(as[Json]) { _ =>
+      log.info("Unrecognized json request")
+      badRequest
     } ~
-    extractRequest { request =>
-      println("Error: unknown request\n" + request)
-      request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
-        .map(_.data.utf8String).map(println)
-      failure
+    extractRequest { _ =>
+      log.info("Error: not a json request")
+//      request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
+//        .map(_.data.utf8String).map(println)
+      badRequest
     }
-
-
   }
 
   def start(): Future[Http.ServerBinding] = {
