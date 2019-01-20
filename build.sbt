@@ -33,3 +33,7 @@ libraryDependencies ++= Seq(
 libraryDependencies += "com.github.pureconfig" %% "pureconfig" % "0.10.1"
 
 libraryDependencies += "com.microsoft.sqlserver" % "mssql-jdbc" % "7.0.0.jre10"
+
+libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
+
+libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
