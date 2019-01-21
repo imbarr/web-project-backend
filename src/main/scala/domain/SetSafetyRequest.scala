@@ -1,3 +1,3 @@
 package domain
 
-case class SetSafetyRequest(id: Int, isSafe: Boolean)
+case class SetSafetyRequest(id: Seq[Int], isSafe: Boolean)

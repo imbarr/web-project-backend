@@ -63,8 +63,12 @@ class Database(config: DatabaseConfig)(implicit executionContext: ExecutionConte
       .stripMargin.query[DBRequest].to[List].transact(xa)
   }
 
-  def changeSafety(safetyRequest: SetSafetyRequest): IO[Unit] = {
+  def changeSafety(safetyRequest: SetSafetyRequest): IO[Seq[Int]] = {
     val safe = if(safetyRequest.isSafe) 1 else 0
-    updateSingleValue(fr"""update payments set isSafe = $safe where id = ${safetyRequest.id}""")
+    fr"" ++ fr""
+    val list = fr"(" ++ safetyRequest.id.dropRight(1).map(i => fr"$i, ").fold(fr"")(_ ++ _) ++
+      fr"${safetyRequest.id.last})"
+    (fr"""update payments set isSafe = $safe where id in""" ++ list ++ fr";")
+      .update.run.transact(xa).map(_ => safetyRequest.id)
   }
 }

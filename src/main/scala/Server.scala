@@ -1,3 +1,5 @@
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.{ToEntityMarshaller, ToResponseMarshaller}
@@ -12,6 +14,7 @@ import domain.json.Decoding._
 import domain.json.Encoding._
 import io.circe.{Encoder, Json}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
@@ -80,12 +83,13 @@ class Server(config: Config)
     } ~
     entity(as[Json]) { json =>
       log.info("Unrecognized json request")
+      println(json.spaces4)
       badRequest
     } ~
     extractRequest { request =>
       log.info("Not a json request")
 //        request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
-//          .map(_.data.length)
+//          .map(_.data.utf8String).map(println)
       badRequest
     }
 
