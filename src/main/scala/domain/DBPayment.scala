@@ -1,4 +1,4 @@
 package domain
 
-case class DBPayment(cardNumber: String, expirationDate: String, CVC: String, money: String,
-                     comment: String, email: String)
+case class DBPayment(id: Int, cardNumber: String, expirationMonth: Int, expirationYear: Int,
+                     CVC: String, money: String, comment: String, email: String, isSafe: Boolean)
