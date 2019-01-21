@@ -53,5 +53,3 @@ class Database(config: DatabaseConfig)(implicit executionContext: ExecutionConte
     updateSingleValue(sql"""update payments set isSafe = $safe where id = ${safetyRequest.id}""")
   }
 }
-
-import akka.http.scaladsl.server.
