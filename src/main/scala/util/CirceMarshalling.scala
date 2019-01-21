@@ -1,5 +1,5 @@
 package util
-import akka.http.scaladsl.marshalling.{Marshaller, ToResponseMarshaller}
+import akka.http.scaladsl.marshalling.{Marshaller, ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.{FromRequestUnmarshaller, Unmarshaller}
 import akka.http.scaladsl.util.FastFuture
@@ -18,15 +18,15 @@ object CirceMarshalling {
       }.map(decode)
   }
 
-  implicit def jsonMarshaller(implicit printer: Printer = Printer.noSpaces): ToResponseMarshaller[Json] = {
+  implicit def jsonMarshaller(implicit printer: Printer = Printer.noSpaces): ToEntityMarshaller[Json] = {
     Marshaller.withFixedContentType(ContentTypes.`application/json`) { json =>
-      HttpResponse(entity = HttpEntity(ContentTypes.`application/json`, ByteString(printer.prettyByteBuffer(json))))
+      HttpEntity(ContentTypes.`application/json`, ByteString(printer.prettyByteBuffer(json)))
     }
   }
 
-  implicit def emptyMarshaller: ToResponseMarshaller[Unit] =
-    Marshaller.withFixedContentType(ContentTypes.NoContentType) { _ => HttpResponse()}
+  implicit def emptyMarshaller: ToEntityMarshaller[Unit] =
+    Marshaller.withFixedContentType(ContentTypes.NoContentType) { _ => HttpEntity.Empty}
 
-  implicit def marshaller[A: Encoder](implicit printer: Printer = Printer.noSpaces): ToResponseMarshaller[A] =
+  implicit def marshaller[A: Encoder](implicit printer: Printer = Printer.noSpaces): ToEntityMarshaller[A] =
     jsonMarshaller(printer).compose(Encoder[A].apply)
 }
