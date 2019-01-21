@@ -29,7 +29,7 @@ class Server(config: Config)
 
   val db = new Database(config.database)
 
-  implicit def toResponseMarshaller[T: Encoder](implicit m: ToEntityMarshaller[T]): ToResponseMarshaller[T] =
+  implicit def toResponseMarshaller[T: Encoder](implicit m: ToEntityMarshaller[T]) =
     m.map(entity => HttpResponse(StatusCodes.OK, CORSHeaders, entity))
 
   val failure = complete(HttpResponse(StatusCodes.InternalServerError, CORSHeaders))
@@ -38,10 +38,10 @@ class Server(config: Config)
   def IOToRoute[T](monad: IO[T])(implicit m: ToResponseMarshaller[T]) =
     onComplete(monad.unsafeToFuture()) {
       case Success(obj) =>
-        log.debug("Data inserted")
+        log.debug("Database transaction successfull")
         complete(obj)
-      case Failure(_) =>
-        log.error("Database transaction resulted in error")
+      case Failure(e) =>
+        log.error("Database transaction resulted in error:\n" + e.toString)
         failure
     }
 
@@ -60,34 +60,32 @@ class Server(config: Config)
           IOToRoute(db.addRequest(request))
         }
       }
-    } ~
-    get {
-      path("payment") {
-        entity(as[RangeRequest]) { param =>
-          IOToRoute(db.getPaymentRange(param))
-        }
-      } ~
-      path("request") {
-        entity(as[RangeRequest]) { param =>
-          IOToRoute(db.getRequestRange(param))
-        }
-      }
-    } ~
-    put {
       path("payment") {
         entity(as[SetSafetyRequest]) { param =>
           IOToRoute(db.changeSafety(param))
         }
+      } ~
+      path("fetch-payments") {
+        entity(as[RangeRequest]) { param =>
+          IOToRoute(db.getPaymentRange(param).flatMap(r =>
+            db.getPaymentRowNumber.map(i => RangeResponse(i, r))))
+        }
+      } ~
+      path("fetch-requests") {
+        entity(as[RangeRequest]) { param =>
+          IOToRoute(db.getRequestRange(param).flatMap(r =>
+            db.getRequestRowNumber.map(i => RangeResponse(i, r))))
+        }
       }
     } ~
-    entity(as[Json]) { _ =>
+    entity(as[Json]) { json =>
       log.info("Unrecognized json request")
       badRequest
     } ~
-    extractRequest { _ =>
+    extractRequest { request =>
       log.info("Not a json request")
-  //      request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
-  //        .map(_.data.utf8String).map(println)
+//        request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
+//          .map(_.data.length)
       badRequest
     }
 
