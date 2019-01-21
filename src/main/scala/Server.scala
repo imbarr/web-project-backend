@@ -1,15 +1,15 @@
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.marshalling.ToResponseMarshaller
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import cats.effect.IO
-import com.microsoft.sqlserver.jdbc.SQLServerException
 import com.typesafe.scalalogging.Logger
-import domain.SortingOptions.SortingOptions
 import domain._
 import domain.json.Decoding._
+import domain.json.Encoding._
 import io.circe.Json
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -19,7 +19,7 @@ class Server(config: Config)
             (implicit val executionContext: ExecutionContextExecutor, system: ActorSystem, log: Logger) {
 
   implicit val materializer: ActorMaterializer = ActorMaterializer()
-  import util.CirceMarshalling.unmarshaller
+  import util.CirceMarshalling._
 
   val CORSHeaders = List(
     `Access-Control-Allow-Origin`.*,
@@ -33,11 +33,11 @@ class Server(config: Config)
   val failure = complete(HttpResponse(StatusCodes.InternalServerError, CORSHeaders))
   val badRequest = complete(HttpResponse(StatusCodes.BadRequest, CORSHeaders))
 
-  def IOToRoute[T](monad: IO[T]) =
+  def IOToRoute[T](monad: IO[T])(implicit m: ToResponseMarshaller[T]) =
     onComplete(monad.unsafeToFuture()) {
-      case Success(_) =>
+      case Success(response) =>
         log.debug("Data inserted")
-        success
+        complete(response)
       case Failure(_) =>
         log.error("Database transaction resulted in error")
         failure
