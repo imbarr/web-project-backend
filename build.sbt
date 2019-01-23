@@ -37,3 +37,6 @@ libraryDependencies += "com.microsoft.sqlserver" % "mssql-jdbc" % "7.0.0.jre10"
 libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.6.4"
 
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
+
+libraryDependencies += "org.apache.pdfbox" % "pdfbox" % "2.0.1"
+
