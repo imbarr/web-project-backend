@@ -1,11 +1,9 @@
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.{ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model.headers._
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
-import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Directives.{entity, _}
 import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.typesafe.scalalogging.Logger
@@ -14,7 +12,6 @@ import domain.json.Decoding._
 import domain.json.Encoding._
 import io.circe.{Encoder, Json}
 
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
 
@@ -41,7 +38,7 @@ class Server(config: Config)
   def IOToRoute[T](monad: IO[T])(implicit m: ToResponseMarshaller[T]) =
     onComplete(monad.unsafeToFuture()) {
       case Success(obj) =>
-        log.debug("Database transaction successfull")
+        log.info("Database transaction successful")
         complete(obj)
       case Failure(e) =>
         log.error("Database transaction resulted in error:\n" + e.toString)
@@ -49,48 +46,61 @@ class Server(config: Config)
     }
 
   val route =
-    post {
-      path("credit-card") {
+    path("payment") {
+      post {
         entity(as[Payment]) { payment =>
           IOToRoute(db.addPayment(payment))
         }
       } ~
-      path("internet-bank") {
-        failure
-      } ~
-      path("ask") {
+      get {
+        entity(as[InternetBankPayment]) { request =>
+          val bytes = FileCreator.getPDF(request)
+          val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
+          complete(HttpResponse(StatusCodes.OK,
+            `Content-Disposition`(ContentDispositionTypes.attachment,
+              Map("filename" -> "bank.pdf")) +: CORSHeaders, entity))
+        }
+      }
+    } ~
+    path("request") {
+      post {
         entity(as[Request]) { request =>
           IOToRoute(db.addRequest(request))
         }
       }
-      path("payment") {
-        entity(as[SetSafetyRequest]) { param =>
-          IOToRoute(db.changeSafety(param))
+    } ~
+    path("admin") {
+      path("payments") {
+        get {
+          entity(as[RangeRequest]) { param =>
+            IOToRoute(db.getPaymentRange(param).flatMap(r =>
+              db.getPaymentRowNumber.map(i => RangeResponse(i, r))))
+          }
+        } ~
+        patch {
+          entity(as[SetSafetyRequest]) { param =>
+            IOToRoute(db.changeSafety(param))
+          }
         }
       } ~
-      path("fetch-payments") {
-        entity(as[RangeRequest]) { param =>
-          IOToRoute(db.getPaymentRange(param).flatMap(r =>
-            db.getPaymentRowNumber.map(i => RangeResponse(i, r))))
-        }
-      } ~
-      path("fetch-requests") {
-        entity(as[RangeRequest]) { param =>
-          IOToRoute(db.getRequestRange(param).flatMap(r =>
-            db.getRequestRowNumber.map(i => RangeResponse(i, r))))
+      path("requests") {
+        get {
+          entity(as[RangeRequest]) { param =>
+            IOToRoute(db.getRequestRange(param).flatMap(r =>
+              db.getRequestRowNumber.map(i => RangeResponse(i, r))))
+          }
         }
       }
     } ~
-    entity(as[Json]) { json =>
-      log.info("Unrecognized json request")
-      println(json.spaces4)
-      badRequest
-    } ~
-    extractRequest { request =>
-      log.info("Not a json request")
-//        request.entity.toStrict(FiniteDuration(1000, TimeUnit.MILLISECONDS))
-//          .map(_.data.utf8String).map(println)
-      badRequest
+    extractUnmatchedPath { path =>
+      entity(as[Json]) { json =>
+        log.info("Unrecognized json request at " + path + ": " + json.noSpaces)
+        badRequest
+      } ~
+      extractRequest { request =>
+        log.info("Not a json request at " + path + ": " + request)
+        badRequest
+      }
     }
 
   def start(): Future[Http.ServerBinding] = {
