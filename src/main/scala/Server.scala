@@ -11,6 +11,7 @@ import domain._
 import domain.json.Decoding._
 import domain.json.Encoding._
 import io.circe.{Encoder, Json}
+import domain.VATOptions.VATOptions
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
@@ -53,12 +54,13 @@ class Server(config: Config)
         }
       } ~
       get {
-        entity(as[InternetBankPayment]) { request =>
-          val bytes = FileCreator.getPDF(request)
-          val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
-          complete(HttpResponse(StatusCodes.OK,
-            `Content-Disposition`(ContentDispositionTypes.attachment,
-              Map("filename" -> "bank.pdf")) +: CORSHeaders, entity))
+        parameterMap {
+          case InternetBankPayment(request) =>
+            val bytes = FileCreator.getPDF(request)
+            val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
+            val disposition = `Content-Disposition`(ContentDispositionTypes.attachment, Map("filename" -> "bank.pdf"))
+            complete(HttpResponse(StatusCodes.OK, disposition  +: CORSHeaders, entity))
+          case _ => badRequest
         }
       }
     } ~
@@ -72,9 +74,14 @@ class Server(config: Config)
     path("admin") {
       path("payments") {
         get {
-          entity(as[RangeRequest]) { param =>
-            IOToRoute(db.getPaymentRange(param).flatMap(r =>
-              db.getPaymentRowNumber.map(i => RangeResponse(i, r))))
+          parameterMap {
+            case RangeRequest(request) =>
+              IOToRoute(
+                for {
+                  range <- db.getPaymentRange(request)
+                  number <- db.getPaymentRowNumber
+                } yield RangeResponse(number, range))
+            case _ => badRequest
           }
         } ~
         patch {
@@ -85,9 +92,14 @@ class Server(config: Config)
       } ~
       path("requests") {
         get {
-          entity(as[RangeRequest]) { param =>
-            IOToRoute(db.getRequestRange(param).flatMap(r =>
-              db.getRequestRowNumber.map(i => RangeResponse(i, r))))
+          parameterMap {
+            case RangeRequest(request) =>
+              IOToRoute(
+                for {
+                  range <- db.getRequestRange(request)
+                  number <- db.getRequestRowNumber
+                } yield RangeResponse(number, range))
+            case _ => badRequest
           }
         }
       }
