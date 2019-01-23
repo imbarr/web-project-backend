@@ -16,16 +16,14 @@ class Database(config: DatabaseConfig)(implicit executionContext: ExecutionConte
     config.password)
 
   def addPayment(payment: Payment): IO[Unit] = updateSingleValue(
-    fr"""insert into payments (card_number, expiration_month, expiration_year, cvc, money, comment, email)
+    fr"""insert into payments (cardNumber, expirationMonth, expirationYear, CVC, money, comment, email)
          |values (${payment.cardNumber}, ${payment.expirationMonth}, ${payment.expirationYear},
-         |${payment.CVC}, ${payment.money.toInt}, ${payment.comment}, ${payment.email});"""
-  )
+         |${payment.CVC}, ${payment.money.toInt}, ${payment.comment}, ${payment.email});""")
 
   def addRequest(request: Request): IO[Unit] = updateSingleValue(
-    fr"""insert into requests (tax_id, bic, account_number, vat, money, telephone, email)
+    fr"""insert into requests (taxId, BIC, accountNumber, VAT, money, telephone, email)
          |values (${request.taxId}, ${request.BIC}, ${request.accountNumber},
-         |${request.VAT.toString}, ${request.money.toInt}, ${request.telephone}, ${request.email});"""
-  )
+         |${request.VAT.toString}, ${request.money.toInt}, ${request.telephone}, ${request.email});""")
 
   def updateSingleValue(query: Fragment): IO[Unit] = {
     query.stripMargin.update.run.transact(xa).map(
