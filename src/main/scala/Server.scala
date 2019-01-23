@@ -10,8 +10,8 @@ import com.typesafe.scalalogging.Logger
 import domain._
 import domain.json.Decoding._
 import domain.json.Encoding._
+import io.circe.syntax._
 import io.circe.{Encoder, Json}
-import domain.VATOptions.VATOptions
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.util.{Failure, Success}
@@ -25,7 +25,8 @@ class Server(config: Config)
   val CORSHeaders = List(
     `Access-Control-Allow-Origin`.*,
     `Access-Control-Allow-Credentials`(true),
-    `Access-Control-Allow-Headers`("Authorization", "Content-Type", "X-Requested-With")
+    `Access-Control-Allow-Headers`("Authorization", "Content-Type", "X-Requested-With", "Content-Range"),
+    `Access-Control-Expose-Headers`("Content-Range")
   )
 
   val db = new Database(config.database)
@@ -36,8 +37,8 @@ class Server(config: Config)
   val failure = complete(HttpResponse(StatusCodes.InternalServerError, CORSHeaders))
   val badRequest = complete(HttpResponse(StatusCodes.BadRequest, CORSHeaders))
 
-  def IOToRoute[T](monad: IO[T])(implicit m: ToResponseMarshaller[T]) =
-    onComplete(monad.unsafeToFuture()) {
+  def IOToRoute[T](entity: IO[T])(implicit m: ToResponseMarshaller[T]) =
+    onComplete(entity.unsafeToFuture()) {
       case Success(obj) =>
         log.info("Database transaction successful")
         complete(obj)
@@ -46,7 +47,30 @@ class Server(config: Config)
         failure
     }
 
+  def rangeRoute[T](getRange: RangeRequest => IO[List[T]], getTotal: IO[Int])(implicit encoder: Encoder[T]) =
+    get {
+      parameterMap {
+        case RangeRequest(request) =>
+            IOToRoute(
+              for {
+                range <- getRange(request)
+                number <- getTotal
+                rangeHeader = `Content-Range`(RangeUnits.Other("records"),
+                  ContentRange(request.start, if(request.end > number) number - 1 else request.end, number))
+              } yield HttpResponse(
+                headers = rangeHeader +: CORSHeaders,
+                entity = HttpEntity(ContentTypes.`application/json`, range.asJson.noSpaces))
+            )
+        case _ => badRequest
+      }
+    }
+
   val route =
+    options {
+      import HttpMethods._
+      complete(HttpResponse(StatusCodes.OK).
+        withHeaders(`Access-Control-Allow-Methods`(OPTIONS, POST, GET, PATCH) +: CORSHeaders))
+    } ~
     path("payment") {
       post {
         entity(as[Payment]) { payment =>
@@ -76,19 +100,9 @@ class Server(config: Config)
         }
       }
     } ~
-    path("admin") {
+    pathPrefix("admin") {
       path("payments") {
-        get {
-          parameterMap {
-            case RangeRequest(request) =>
-              IOToRoute(
-                for {
-                  range <- db.getPaymentRange(request)
-                  number <- db.getPaymentRowNumber
-                } yield RangeResponse(number, range))
-            case _ => badRequest
-          }
-        } ~
+        rangeRoute(db.getPaymentRange, db.getPaymentRowNumber) ~
         patch {
           entity(as[SetSafetyRequest]) { param =>
             IOToRoute(db.changeSafety(param))
@@ -96,26 +110,12 @@ class Server(config: Config)
         }
       } ~
       path("requests") {
-        get {
-          parameterMap {
-            case RangeRequest(request) =>
-              IOToRoute(
-                for {
-                  range <- db.getRequestRange(request)
-                  number <- db.getRequestRowNumber
-                } yield RangeResponse(number, range))
-            case _ => badRequest
-          }
-        }
+        rangeRoute(db.getRequestRange, db.getRequestRowNumber)
       }
     } ~
-    extractUnmatchedPath { path =>
-      entity(as[Json]) { json =>
-        log.info("Unrecognized json request at " + path + ": " + json.noSpaces)
-        badRequest
-      } ~
-      extractRequest { request =>
-        log.info("Not a json request at " + path + ": " + request)
+    extractRequest { request =>
+      extractUnmatchedPath { path =>
+        log.info("Unrecognized request at " + path + ": " + request)
         badRequest
       }
     }
