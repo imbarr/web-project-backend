@@ -56,10 +56,15 @@ class Server(config: Config)
       get {
         parameterMap {
           case InternetBankPayment(request) =>
-            val bytes = FileCreator.getPDF(request)
-            val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
-            val disposition = `Content-Disposition`(ContentDispositionTypes.attachment, Map("filename" -> "bank.pdf"))
-            complete(HttpResponse(StatusCodes.OK, disposition  +: CORSHeaders, entity))
+            FileCreator.getPDF(request) match {
+              case Some(bytes) =>
+                val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
+                val disposition = `Content-Disposition`(
+                  ContentDispositionTypes.attachment,
+                  Map("filename" -> "bank.pdf"))
+                complete(HttpResponse(StatusCodes.OK, disposition  +: CORSHeaders, entity))
+              case None => failure
+            }
           case _ => badRequest
         }
       }
