@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 import doobie.Transactor
 import domain._
 import cats.effect.IO
@@ -63,10 +65,13 @@ class Database(config: DatabaseConfig)(implicit executionContext: ExecutionConte
 
   def changeSafety(safetyRequest: SetSafetyRequest): IO[Seq[Int]] = {
     val safe = if(safetyRequest.isSafe) 1 else 0
-    fr"" ++ fr""
     val list = fr"(" ++ safetyRequest.id.dropRight(1).map(i => fr"$i, ").fold(fr"")(_ ++ _) ++
       fr"${safetyRequest.id.last})"
     (fr"""update payments set isSafe = $safe where id in""" ++ list ++ fr";")
       .update.run.transact(xa).map(_ => safetyRequest.id)
+  }
+
+  def getPasswordHash(login: String): IO[String] = {
+    fr"select password from admins where login = $login".query[String].unique.transact(xa)
   }
 }

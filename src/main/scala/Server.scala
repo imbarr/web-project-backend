@@ -1,9 +1,13 @@
+import java.security.MessageDigest
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.{ToEntityMarshaller, ToResponseMarshaller}
 import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives.{entity, _}
+import akka.http.scaladsl.server.{Directive0, Route}
+import akka.http.scaladsl.server.directives.Credentials
 import akka.stream.ActorMaterializer
 import cats.effect.IO
 import com.typesafe.scalalogging.Logger
@@ -29,13 +33,25 @@ class Server(config: Config)
     `Access-Control-Expose-Headers`("Content-Range")
   )
 
+  def handleCORS(route: Route): Route =
+    respondWithHeaders(CORSHeaders) {
+      options {
+        import HttpMethods._
+        complete(HttpResponse(StatusCodes.OK).
+          withHeaders(`Access-Control-Allow-Methods`(OPTIONS, POST, GET, PATCH)))
+      } ~
+      route
+    }
+
   val db = new Database(config.database)
+  val security = new Security(db)
 
   implicit def toResponseMarshaller[T: Encoder](implicit m: ToEntityMarshaller[T]) =
-    m.map(entity => HttpResponse(StatusCodes.OK, CORSHeaders, entity))
+    m.map(entity => HttpResponse(StatusCodes.OK, entity = entity))
 
-  val failure = complete(HttpResponse(StatusCodes.InternalServerError, CORSHeaders))
-  val badRequest = complete(HttpResponse(StatusCodes.BadRequest, CORSHeaders))
+  val failure = complete(HttpResponse(StatusCodes.InternalServerError))
+  val badRequest = complete(HttpResponse(StatusCodes.BadRequest))
+  val forbidden = complete(HttpResponse(StatusCodes.Forbidden))
 
   def IOToRoute[T](entity: IO[T])(implicit m: ToResponseMarshaller[T]) =
     onComplete(entity.unsafeToFuture()) {
@@ -58,7 +74,7 @@ class Server(config: Config)
                 rangeHeader = `Content-Range`(RangeUnits.Other("records"),
                   ContentRange(request.start, if(request.end > number) number - 1 else request.end, number))
               } yield HttpResponse(
-                headers = rangeHeader +: CORSHeaders,
+                headers = List(rangeHeader),
                 entity = HttpEntity(ContentTypes.`application/json`, range.asJson.noSpaces))
             )
         case _ => badRequest
@@ -66,57 +82,59 @@ class Server(config: Config)
     }
 
   val route =
-    options {
-      import HttpMethods._
-      complete(HttpResponse(StatusCodes.OK).
-        withHeaders(`Access-Control-Allow-Methods`(OPTIONS, POST, GET, PATCH) +: CORSHeaders))
-    } ~
-    path("payment") {
-      post {
-        entity(as[Payment]) { payment =>
-          IOToRoute(db.addPayment(payment))
-        }
-      } ~
-      get {
-        parameterMap {
-          case InternetBankPayment(request) =>
-            FileCreator.getPDF(request) match {
-              case Some(bytes) =>
-                val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
-                val disposition = `Content-Disposition`(
-                  ContentDispositionTypes.attachment,
-                  Map("filename" -> "bank.pdf"))
-                complete(HttpResponse(StatusCodes.OK, disposition  +: CORSHeaders, entity))
-              case None => failure
-            }
-          case _ => badRequest
-        }
-      }
-    } ~
-    path("request") {
-      post {
-        entity(as[Request]) { request =>
-          IOToRoute(db.addRequest(request))
-        }
-      }
-    } ~
-    pathPrefix("admin") {
-      path("payments") {
-        rangeRoute(db.getPaymentRange, db.getPaymentRowNumber) ~
-        patch {
-          entity(as[SetSafetyRequest]) { param =>
-            IOToRoute(db.changeSafety(param))
+    handleCORS {
+      path("payment") {
+        post {
+          entity(as[Payment]) { payment =>
+            IOToRoute(db.addPayment(payment))
+          }
+        } ~
+        get {
+          parameterMap {
+            case InternetBankPayment(request) =>
+              FileCreator.getPDF(request) match {
+                case Some(bytes) =>
+                  val entity = HttpEntity(ContentType(MediaTypes.`application/pdf`), bytes)
+                  val disposition = `Content-Disposition`(
+                    ContentDispositionTypes.attachment,
+                    Map("filename" -> "bank.pdf"))
+                  complete(HttpResponse(StatusCodes.OK, List(disposition), entity))
+                case None => failure
+              }
+            case _ => badRequest
           }
         }
       } ~
-      path("requests") {
-        rangeRoute(db.getRequestRange, db.getRequestRowNumber)
-      }
-    } ~
-    extractRequest { request =>
-      extractUnmatchedPath { path =>
-        log.info("Unrecognized request at " + path + ": " + request)
-        badRequest
+      path("request") {
+        post {
+          entity(as[Request]) { request =>
+            IOToRoute(db.addRequest(request))
+          }
+        }
+      } ~
+      pathPrefix("admin") {
+        Route.seal {
+          authenticateBasicAsync("admin", security.authenticator) { _ =>
+            path("payments") {
+              rangeRoute(db.getPaymentRange, db.getPaymentRowNumber) ~
+              patch {
+                entity(as[SetSafetyRequest]) { param =>
+                  IOToRoute(db.changeSafety(param))
+                }
+              }
+            } ~
+            path("requests") {
+              rangeRoute(db.getRequestRange, db.getRequestRowNumber)
+            } ~
+            complete(HttpResponse(StatusCodes.OK))
+          }
+        }
+      } ~
+      extractRequest { request =>
+        extractUnmatchedPath { path =>
+          log.info("Unrecognized request at " + path + ": " + request)
+          badRequest
+        }
       }
     }
 
